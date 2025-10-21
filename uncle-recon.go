@@ -16,12 +16,11 @@ import (
 	"sync"
 	"time"
 
-	 wappalyzer "github.com/projectdiscovery/wappalyzergo"
-
+	wappalyzer "github.com/projectdiscovery/wappalyzergo"
 )
 
 // Global Wappalyzer client
-var wappalyzerClient *wappalyzergo.Wappalyzer
+var wappalyzerClient *wappalyzer.Wappalyzer
 
 // Regular expression to find the title tag in HTML
 var titleRegex = regexp.MustCompile(`(?i)<title>(.*?)<\/title>`)
@@ -50,7 +49,7 @@ func main() {
 
 	// --- Initialize Wappalyzer ---
 	var err error
-	wappalyzerClient, err = wappalyzergo.New()
+	wappalyzerClient, err = wappalyzer.New()
 	if err != nil {
 		log.Fatalf("[-] Failed to initialize Wappalyzer: %s\n", err)
 	}
@@ -118,12 +117,11 @@ func main() {
 func worker(subdomainChan <-chan string, resultsChan chan<- ScanResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for subdomain := range subdomainChan {
-		// Check both http and https
 		for _, scheme := range []string{"https", "http"} {
 			url := fmt.Sprintf("%s://%s", scheme, subdomain)
 			if result, ok := analyzeHost(url); ok {
 				resultsChan <- *result
-				break // Found a live host, no need to check the other scheme
+				break
 			}
 		}
 	}
@@ -132,12 +130,11 @@ func worker(subdomainChan <-chan string, resultsChan chan<- ScanResult, wg *sync
 // findSubdomains fetches subdomain data from crt.sh
 func findSubdomains(domain string) map[string]struct{} {
 	subdomains := make(map[string]struct{})
-	subdomains[domain] = struct{}{} // Add the root domain itself
+	subdomains[domain] = struct{}{}
 
 	client := &http.Client{Timeout: 20 * time.Second}
 	req, _ := http.NewRequest("GET", fmt.Sprintf("https://crt.sh/?q=%%.%s&output=json", domain), nil)
 	req.Header.Set("User-Agent", "UNCLE_RECON/1.0")
-
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -157,7 +154,6 @@ func findSubdomains(domain string) map[string]struct{} {
 
 	var entries []CrtShEntry
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		// Handle cases where crt.sh returns a single object on no results
 		return subdomains
 	}
 
@@ -179,10 +175,10 @@ func analyzeHost(url string) (*ScanResult, bool) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Ignore SSL errors
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse // Do not follow redirects
+			return http.ErrUseLastResponse
 		},
 	}
 
@@ -191,7 +187,7 @@ func analyzeHost(url string) (*ScanResult, bool) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, false // Host is not live or timed out
+		return nil, false
 	}
 	defer resp.Body.Close()
 
@@ -201,21 +197,17 @@ func analyzeHost(url string) (*ScanResult, bool) {
 	}
 	htmlContent := string(body)
 
-	// --- Extract Title ---
 	titleMatch := titleRegex.FindStringSubmatch(htmlContent)
 	title := ""
 	if len(titleMatch) > 1 {
 		title = strings.TrimSpace(titleMatch[1])
 	}
 
-	// --- Extract IP ---
 	ipAddress := ""
 	if addr, err := net.LookupIP(resp.Request.URL.Hostname()); err == nil && len(addr) > 0 {
 		ipAddress = addr[0].String()
 	}
 
-	// --- Analyze Technologies ---
-	// Wappalyzer needs headers and the body. We pass them in.
 	techs, err := wappalyzerClient.AnalyzeWithBody(resp.Header, body)
 	var techNames []string
 	if err == nil {
@@ -253,7 +245,6 @@ func parseMatchCodes(codesStr string) map[int]struct{} {
 
 // saveOutput writes the results to a file or stdout
 func saveOutput(results []ScanResult, filename string) {
-	// Sort results by URL for consistent output
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].URL < results[j].URL
 	})
@@ -282,5 +273,4 @@ func saveOutput(results []ScanResult, filename string) {
 		fmt.Print(output)
 	}
 }
-
 
