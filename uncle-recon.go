@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/projectdiscovery/wappalyzergo"
+	"github.comcom/projectdiscovery/wappalyzergo"
 )
 
 // Global Wappalyzer client
@@ -281,6 +281,5 @@ func saveOutput(results []ScanResult, filename string) {
 		fmt.Print(output)
 	}
 }
-
 
 
