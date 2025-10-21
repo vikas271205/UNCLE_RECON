@@ -48,11 +48,9 @@ func main() {
 	}
 
 	// --- Initialize Wappalyzer ---
-	var err error
-	wappalyzerClient, err = wappalyzer.New()
-	if err != nil {
-		log.Fatalf("[-] Failed to initialize Wappalyzer: %s\n", err)
-	}
+// --- Initialize Wappalyzer ---
+	wappalyzerClient = wappalyzer.New()
+
 
 	// --- Main Logic ---
 	fmt.Printf("[*] Discovering subdomains for %s...\n", *target)
