@@ -135,6 +135,8 @@ func findSubdomains(domain string) map[string]struct{} {
 
 	client := &http.Client{Timeout: 20 * time.Second}
 	req, _ := http.NewRequest("GET", fmt.Sprintf("https://crt.sh/?q=%%.%s&output=json", domain), nil)
+	req.Header.Set("User-Agent", "UNCLE_RECON/1.0")
+
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -155,7 +157,6 @@ func findSubdomains(domain string) map[string]struct{} {
 	var entries []CrtShEntry
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
 		// Handle cases where crt.sh returns a single object on no results
-		// by simply returning the initial map.
 		return subdomains
 	}
 
@@ -184,7 +185,10 @@ func analyzeHost(url string) (*ScanResult, bool) {
 		},
 	}
 
-	resp, err := client.Get(url)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("User-Agent", "UNCLE_RECON/1.0")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, false // Host is not live or timed out
 	}
@@ -210,12 +214,8 @@ func analyzeHost(url string) (*ScanResult, bool) {
 	}
 
 	// --- Analyze Technologies ---
-	// Create a new response for wappalyzer to avoid issues with closed bodies
-	newResp := &http.Response{
-		Header: resp.Header,
-		Body:   io.NopCloser(strings.NewReader(htmlContent)),
-	}
-	techs, err := wappalyzerClient.Analyze(newResp)
+	// Wappalyzer needs headers and the body. We pass them in.
+	techs, err := wappalyzerClient.AnalyzeWithBody(resp.Header, body)
 	var techNames []string
 	if err == nil {
 		for tech := range techs {
@@ -270,7 +270,7 @@ func saveOutput(results []ScanResult, filename string) {
 
 	output := builder.String()
 
-	if filename != "" {
+	if filename != "" {.
 		err := os.WriteFile(filename, []byte(output), 0644)
 		if err != nil {
 			log.Fatalf("[-] Failed to write to output file: %s\n", err)
