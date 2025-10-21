@@ -25,7 +25,7 @@ var wappalyzerClient *wappalyzer.Wappalyze
 // Regular expression to find the title tag in HTML
 var titleRegex = regexp.MustCompile(`(?i)<title>(.*?)<\/title>`)
 
-// Result struct to hold scan data for each live host
+// Result struct
 type ScanResult struct {
 	URL           string
 	StatusCode    int
@@ -36,45 +36,39 @@ type ScanResult struct {
 }
 
 func main() {
-	// --- Command Line Arguments ---
-	target := flag.String("u", "", "The target domain (e.g., example.com)")
-	outputFile := flag.String("o", "", "File to save the output to (e.g., results.txt)")
-	concurrency := flag.Int("c", 50, "Number of concurrent tasks to run")
-	matchCodesStr := flag.String("mc", "", "Match status codes, comma-separated (e.g., 200,302,403)")
+	target := flag.String("u", "", "Target domain (e.g., example.com)")
+	outputFile := flag.String("o", "", "File to save output")
+	concurrency := flag.Int("c", 50, "Concurrent tasks")
+	matchCodesStr := flag.String("mc", "", "Match status codes, comma-separated")
 	flag.Parse()
 
 	if *target == "" {
-		log.Fatal("[-] Target URL/domain is required. Use the -u flag.")
+		log.Fatal("[-] Target required. Use -u flag.")
 	}
 
-	// --- Initialize Wappalyzer ---
 	var err error
 	wappalyzerClient, err = wappalyzer.New()
 	if err != nil {
-		log.Fatalf("[-] Failed to initialize Wappalyzer: %v\n", err)
+		log.Fatalf("[-] Failed to init Wappalyzer: %v", err)
 	}
 
-	// --- Main Logic ---
 	fmt.Printf("[*] Discovering subdomains for %s...\n", *target)
 	subdomains := findSubdomains(*target)
 	if len(subdomains) == 0 {
-		log.Fatal("[-] No subdomains found. Exiting.")
+		log.Fatal("[-] No subdomains found.")
 	}
-	fmt.Printf("[+] Found %d unique potential subdomains.\n", len(subdomains))
-	fmt.Printf("[*] Probing hosts to find live web servers...\n")
+	fmt.Printf("[+] Found %d subdomains.\n", len(subdomains))
+	fmt.Println("[*] Probing for live hosts...")
 
-	// --- Concurrency Setup ---
 	var wg sync.WaitGroup
 	subdomainChan := make(chan string, *concurrency)
 	resultsChan := make(chan ScanResult, *concurrency)
 
-	// Create worker goroutines
 	for i := 0; i < *concurrency; i++ {
 		wg.Add(1)
 		go worker(subdomainChan, resultsChan, &wg)
 	}
 
-	// Feed subdomains to the workers
 	go func() {
 		for sub := range subdomains {
 			subdomainChan <- sub
@@ -82,19 +76,16 @@ func main() {
 		close(subdomainChan)
 	}()
 
-	// Close results channel when all workers are done
 	go func() {
 		wg.Wait()
 		close(resultsChan)
 	}()
 
-	// --- Collect and Process Results ---
 	var liveHosts []ScanResult
 	for result := range resultsChan {
 		liveHosts = append(liveHosts, result)
 	}
 
-	// --- Filtering ---
 	var filteredHosts []ScanResult
 	if *matchCodesStr != "" {
 		codes := parseMatchCodes(*matchCodesStr)
@@ -107,13 +98,10 @@ func main() {
 		filteredHosts = liveHosts
 	}
 
-	fmt.Printf("[+] Analysis complete. Found %d live hosts matching criteria.\n", len(filteredHosts))
-
-	// --- Save Output ---
+	fmt.Printf("[+] Found %d live hosts matching criteria.\n", len(filteredHosts))
 	saveOutput(filteredHosts, *outputFile)
 }
 
-// worker function to process subdomains from the channel
 func worker(subdomainChan <-chan string, resultsChan chan<- ScanResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for subdomain := range subdomainChan {
@@ -127,7 +115,6 @@ func worker(subdomainChan <-chan string, resultsChan chan<- ScanResult, wg *sync
 	}
 }
 
-// findSubdomains fetches subdomain data from crt.sh
 func findSubdomains(domain string) map[string]struct{} {
 	subdomains := make(map[string]struct{})
 	subdomains[domain] = struct{}{}
@@ -144,7 +131,7 @@ func findSubdomains(domain string) map[string]struct{} {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("[!] crt.sh returned non-200 status: %d\n", resp.StatusCode)
+		fmt.Printf("[!] crt.sh returned non-200: %d\n", resp.StatusCode)
 		return subdomains
 	}
 
@@ -166,11 +153,9 @@ func findSubdomains(domain string) map[string]struct{} {
 			}
 		}
 	}
-
 	return subdomains
 }
 
-// analyzeHost probes a single URL and extracts information if it's live
 func analyzeHost(url string) (*ScanResult, bool) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -208,14 +193,13 @@ func analyzeHost(url string) (*ScanResult, bool) {
 		ipAddress = addr[0].String()
 	}
 
-	techs, err := wappalyzerClient.AnalyzeWithBody(resp.Header, body)
+	// Updated: Use Fingerprint instead of AnalyzeWithBody
+	technologies := wappalyzerClient.Fingerprint(resp.Header, body)
 	var techNames []string
-	if err == nil {
-		for tech := range techs {
-			techNames = append(techNames, tech)
-		}
-		sort.Strings(techNames)
+	for tech := range technologies {
+		techNames = append(techNames, tech)
 	}
+	sort.Strings(techNames)
 
 	result := &ScanResult{
 		URL:           url,
@@ -229,7 +213,6 @@ func analyzeHost(url string) (*ScanResult, bool) {
 	return result, true
 }
 
-// parseMatchCodes converts a comma-separated string of codes to a set
 func parseMatchCodes(codesStr string) map[int]struct{} {
 	codes := make(map[int]struct{})
 	parts := strings.Split(codesStr, ",")
@@ -243,7 +226,6 @@ func parseMatchCodes(codesStr string) map[int]struct{} {
 	return codes
 }
 
-// saveOutput writes the results to a file or stdout
 func saveOutput(results []ScanResult, filename string) {
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].URL < results[j].URL
@@ -261,11 +243,10 @@ func saveOutput(results []ScanResult, filename string) {
 	}
 
 	output := builder.String()
-
 	if filename != "" {
 		err := os.WriteFile(filename, []byte(output), 0644)
 		if err != nil {
-			log.Fatalf("[-] Failed to write to output file: %s\n", err)
+			log.Fatalf("[-] Failed to write output: %v", err)
 		}
 		fmt.Printf("[*] Results saved to %s\n", filename)
 	} else {
