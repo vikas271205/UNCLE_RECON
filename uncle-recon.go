@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.comcom/projectdiscovery/wappalyzergo"
+	"github.com/projectdiscovery/wappalyzergo"
 )
 
 // Global Wappalyzer client
