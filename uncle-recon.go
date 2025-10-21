@@ -20,7 +20,7 @@ import (
 )
 
 // Global Wappalyzer client
-var wappalyzerClient *wappalyzer.Wappalyzer
+var wappalyzerClient *wappalyzer.Wappalyze
 
 // Regular expression to find the title tag in HTML
 var titleRegex = regexp.MustCompile(`(?i)<title>(.*?)<\/title>`)
@@ -48,9 +48,11 @@ func main() {
 	}
 
 	// --- Initialize Wappalyzer ---
-// --- Initialize Wappalyzer ---
-	wappalyzerClient = wappalyzer.New()
-
+	var err error
+	wappalyzerClient, err = wappalyzer.New()
+	if err != nil {
+		log.Fatalf("[-] Failed to initialize Wappalyzer: %v\n", err)
+	}
 
 	// --- Main Logic ---
 	fmt.Printf("[*] Discovering subdomains for %s...\n", *target)
