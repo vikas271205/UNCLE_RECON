@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -155,7 +154,8 @@ func findSubdomains(domain string) map[string]struct{} {
 
 	var entries []CrtShEntry
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
-		fmt.Printf("[!] Could not decode JSON from crt.sh: %s\n", err)
+		// Handle cases where crt.sh returns a single object on no results
+		// by simply returning the initial map.
 		return subdomains
 	}
 
@@ -178,6 +178,9 @@ func analyzeHost(url string) (*ScanResult, bool) {
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Ignore SSL errors
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // Do not follow redirects
 		},
 	}
 
@@ -207,7 +210,12 @@ func analyzeHost(url string) (*ScanResult, bool) {
 	}
 
 	// --- Analyze Technologies ---
-	techs, err := wappalyzerClient.Analyze(resp)
+	// Create a new response for wappalyzer to avoid issues with closed bodies
+	newResp := &http.Response{
+		Header: resp.Header,
+		Body:   io.NopCloser(strings.NewReader(htmlContent)),
+	}
+	techs, err := wappalyzerClient.Analyze(newResp)
 	var techNames []string
 	if err == nil {
 		for tech := range techs {
@@ -273,4 +281,5 @@ func saveOutput(results []ScanResult, filename string) {
 		fmt.Print(output)
 	}
 }
+
 
