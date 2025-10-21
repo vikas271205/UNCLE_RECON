@@ -270,7 +270,7 @@ func saveOutput(results []ScanResult, filename string) {
 
 	output := builder.String()
 
-	if filename != "" {.
+	if filename != "" {
 		err := os.WriteFile(filename, []byte(output), 0644)
 		if err != nil {
 			log.Fatalf("[-] Failed to write to output file: %s\n", err)
@@ -281,5 +281,6 @@ func saveOutput(results []ScanResult, filename string) {
 		fmt.Print(output)
 	}
 }
+
 
 
